@@ -68,7 +68,8 @@ public class VersioningIT extends TestSpaceWithFeature {
 
   public void updateFeature(String spaceId) {
     // update a feature
-    postFeature(spaceId, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name")));
+    postFeature(spaceId, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name")),
+        AuthProfile.ACCESS_OWNER_1_ADMIN);
   }
 
   @After
@@ -494,12 +495,6 @@ public class VersioningIT extends TestSpaceWithFeature {
   }
 
   @Test
-  public void getFeaturesVersionStarAndAuthor() {
-    // TODO
-  }
-
-  @Test
-  @Ignore // TODO remove ignore
   public void searchFeaturesByPropertyAndAuthor() {
     postFeature(SPACE_ID_1_NO_UUID, new Feature().withId(FEATURE_ID_2).withProperties(new Properties().with("capacity", 58505)),
         AuthProfile.ACCESS_OWNER_2_ALL);
@@ -507,7 +502,7 @@ public class VersioningIT extends TestSpaceWithFeature {
     given()
         .headers(getAuthHeaders(AuthProfile.ACCESS_ALL))
         .when()
-        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.version=1&f.author=" + USER_1 + "&p.capacity=58500")
+        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?version=1&author=" + USER_1 + "&p.capacity=58500")
         .then()
         .statusCode(OK.code())
         .body("features.size()", equalTo(1))
@@ -516,7 +511,7 @@ public class VersioningIT extends TestSpaceWithFeature {
     given()
         .headers(getAuthHeaders(AuthProfile.ACCESS_ALL))
         .when()
-        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.version=2&f.author=" + USER_1 + "&p.capacity=58500")
+        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?version=2&author=" + USER_1 + "&p.capacity=58500")
         .then()
         .statusCode(OK.code())
         .body("features.size()", equalTo(0));
@@ -524,7 +519,7 @@ public class VersioningIT extends TestSpaceWithFeature {
     given()
         .headers(getAuthHeaders(AuthProfile.ACCESS_ALL))
         .when()
-        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.version=2&f.author=" + USER_2 + "&p.capacity>58500")
+        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?version=2&author=" + USER_2 + "&p.capacity>58500")
         .then()
         .statusCode(OK.code())
         .body("features.size()", equalTo(1))
@@ -534,7 +529,7 @@ public class VersioningIT extends TestSpaceWithFeature {
     given()
         .headers(getAuthHeaders(AuthProfile.ACCESS_ALL))
         .when()
-        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.version=lt=10&f.author=" + USER_2 + "&p.capacity=58505")
+        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?version=10&author=" + USER_2 + "&p.capacity=58505")
         .then()
         .statusCode(OK.code())
         .body("features.size()", equalTo(1))
@@ -544,14 +539,10 @@ public class VersioningIT extends TestSpaceWithFeature {
     given()
         .headers(getAuthHeaders(AuthProfile.ACCESS_ALL))
         .when()
-        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.id=" + FEATURE_ID_2 + "&f.version=lt=10&f.author=" + USER_1 + "&f.author="
-            + USER_2 + "&p.capacity<=58505")
+        .get(getSpacesPath() + "/" + SPACE_ID_1_NO_UUID + "/search?f.id=" + FEATURE_ID_2 + "&version=2&author=" + USER_2 + "&p.capacity<=58505")
         .then()
         .statusCode(OK.code())
-        .body("features.size()", equalTo(2))
-        .body("features[0].id", equalTo(FEATURE_ID_2))
-        .body("features[0].properties.capacity", equalTo(58500))
-        .body("features[0].properties.@ns:com:here:xyz.version", equalTo(1))
+        .body("features.size()", equalTo(1))
         .body("features[0].id", equalTo(FEATURE_ID_2))
         .body("features[0].properties.capacity", equalTo(58505))
         .body("features[0].properties.@ns:com:here:xyz.version", equalTo(2));
@@ -566,8 +557,8 @@ public class VersioningIT extends TestSpaceWithFeature {
         .then()
         .statusCode(NO_CONTENT.code());
 
-    postFeature(SPACE_ID_2_UUID, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name 2")));
+    postFeature(SPACE_ID_2_UUID, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name 2")), AuthProfile.ACCESS_OWNER_1_ADMIN);
 
-    postFeature(SPACE_ID_2_UUID, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name 3")));
+    postFeature(SPACE_ID_2_UUID, new Feature().withId(FEATURE_ID_1).withProperties(new Properties().with("name", "updated name 3")), AuthProfile.ACCESS_OWNER_1_ADMIN);
   }
 }

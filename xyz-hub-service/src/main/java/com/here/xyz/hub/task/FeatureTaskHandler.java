@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2022 HERE Europe B.V.
+ * Copyright (C) 2017-2023 HERE Europe B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpResponseStatus.TOO_MANY_REQUESTS;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.google.common.base.Strings;
 import com.here.xyz.Payload;
 import com.here.xyz.XyzSerializable;
 import com.here.xyz.events.ContentModifiedNotification;
@@ -74,7 +73,6 @@ import com.here.xyz.hub.rest.ApiParam;
 import com.here.xyz.hub.rest.ApiResponseType;
 import com.here.xyz.hub.rest.HttpException;
 import com.here.xyz.hub.task.FeatureTask.ConditionalOperation;
-import com.here.xyz.hub.task.FeatureTask.DeleteOperation;
 import com.here.xyz.hub.task.FeatureTask.ReadQuery;
 import com.here.xyz.hub.task.FeatureTask.TileQuery;
 import com.here.xyz.hub.task.FeatureTask.TileQuery.TransformationContext;
@@ -131,6 +129,7 @@ import java.util.stream.Collectors;
 import net.jodah.expiringmap.ExpirationPolicy;
 import net.jodah.expiringmap.ExpiringMap;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -297,7 +296,7 @@ public class FeatureTaskHandler {
       }
 
       //Update the contentUpdatedAt timestamp to indicate that the data in this space was modified
-      if (task instanceof FeatureTask.ConditionalOperation || task instanceof FeatureTask.DeleteOperation) {
+      if (task instanceof FeatureTask.ConditionalOperation ) {
         long now = Core.currentTimeMillis();
         if (now - task.space.contentUpdatedAt > Space.CONTENT_UPDATED_AT_INTERVAL_MILLIS) {
           task.space.contentUpdatedAt = Core.currentTimeMillis();
@@ -794,9 +793,14 @@ public class FeatureTaskHandler {
                       //Inject the minVersion from the space config
                       ((SelectiveEvent<?>) task.getEvent()).setMinVersion(space.getMinVersion());
                     }
+
                     if (task.getEvent() instanceof ContextAwareEvent) {
                       //Inject the versionsToKeep from the space config
                       ((ContextAwareEvent<?>) task.getEvent()).setVersionsToKeep(space.getVersionsToKeep());
+                    }
+
+                    if (task.getEvent() instanceof IterateFeaturesEvent) {
+                      ((IterateFeaturesEvent) task.getEvent()).setEnableGlobalVersioning(space.isEnableGlobalVersioning());
                     }
 
                     return Future.succeededFuture(space);
@@ -1464,31 +1468,40 @@ public class FeatureTaskHandler {
           || !task.storage.capabilities.clusteringTypes.contains(clusteringType))) {
         callback.exception(new HttpException(BAD_REQUEST, "Clustering of type \"" + clusteringType + "\" is not"
             + "supported by storage connector \"" + task.storage.id + "\"."));
+        return;
       }
     }
 
     if (task.getEvent() instanceof IterateHistoryEvent) {
       if (!task.space.isEnableGlobalVersioning()) {
         callback.exception(new HttpException(BAD_REQUEST, "This space ["+task.space.getId()+"] does not support version queries."));
+        return;
       }
       int startVersion = ((IterateHistoryEvent) task.getEvent()).getStartVersion();
       int endVersion = ((IterateHistoryEvent) task.getEvent()).getEndVersion();
-      if(startVersion != 0 && startVersion < 1)
+      if(startVersion != 0 && startVersion < 1) {
         callback.exception(new HttpException(BAD_REQUEST, "startVersion is out or range [1-n]."));
-      if(startVersion != 0 && endVersion != 0 && endVersion < startVersion)
+        return;
+      }
+      if(startVersion != 0 && endVersion != 0 && endVersion < startVersion) {
         callback.exception(new HttpException(BAD_REQUEST, "endVersion has to be smaller than startVersion."));
-    }
-
-    if (task.getEvent() instanceof IterateFeaturesEvent) {
-      if (!task.space.isEnableGlobalVersioning() && ((IterateFeaturesEvent) task.getEvent()).getV() != null) {
-        callback.exception(new HttpException(BAD_REQUEST, "This space ["+task.space.getId()+"] does not support version queries."));
+        return;
       }
     }
 
     if (task.getEvent() instanceof GetHistoryStatisticsEvent) {
       if (!task.space.isEnableGlobalVersioning()) {
         callback.exception(new HttpException(BAD_REQUEST, "This space [" + task.space.getId() + "] does not support history."));
+        return;
       }
+    }
+
+    if (task.getEvent() instanceof SelectiveEvent
+        && StringUtils.isNotBlank(((SelectiveEvent) task.getEvent()).getRef())
+        && task.space.getVersionsToKeep() < 2
+        && !task.space.isEnableGlobalVersioning()) {
+      callback.exception(new HttpException(BAD_REQUEST, "This space ["+task.space.getId()+"] does not support queries with version parameter."));
+      return;
     }
 
     callback.call(task);
@@ -1526,7 +1539,7 @@ public class FeatureTaskHandler {
   }
 
   static <X extends FeatureTask<?, X>> void checkPreconditions(X task, Callback<X> callback) throws HttpException {
-    if (task.space.isReadOnly() && (task instanceof ConditionalOperation || task instanceof DeleteOperation)) {
+    if (task.space.isReadOnly() && (task instanceof ConditionalOperation )) {
       throw new HttpException(METHOD_NOT_ALLOWED,
           "The method is not allowed, because the resource \"" + task.space.getId() + "\" is marked as read-only. Update the resource definition to enable editing of features.");
     }
